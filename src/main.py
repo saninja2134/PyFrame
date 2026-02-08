@@ -2,10 +2,44 @@ import sys
 import time
 from datetime import datetime, timezone
 from PyQt6.QtWidgets import QApplication
-from PyQt6.QtCore import QTimer, QObject, pyqtSignal
+from PyQt6.QtCore import QTimer, QObject, pyqtSignal, QThread
 from overlay import WarframeOverlay
 from api_clients import WarframeAPI, WarframeReference
 from pynput import keyboard
+
+class SearchWorker(QThread):
+    finished = pyqtSignal(str, str) # summary_html, bis_url
+
+    def __init__(self, query):
+        super().__init__()
+        self.query = query
+
+    def run(self):
+        # Price Check
+        price_text, full_name = WarframeAPI.get_market_item_price(self.query)
+        
+        # Wiki Info
+        wiki_text = WarframeAPI.get_wiki_info(full_name)
+        
+        # Drop / Acqusition Info
+        drop_text = WarframeAPI.get_drop_locations(full_name)
+
+        # Compile HTML for Summary
+        summary_html = f"""
+        <style>
+            h3 {{ margin-top: 0; margin-bottom: 5px; color: #00d2ff; font-size: 14px; }}
+            div {{ margin-bottom: 10px; }}
+            b {{ color: #eee; }}
+        </style>
+        <h2 style='color: #fff; margin-bottom: 10px;'>{full_name}</h2>
+        <div>{price_text}</div>
+        <div>{drop_text}</div>
+        <div style='font-size: 11px;'>{wiki_text}</div>
+        """
+        
+        # BiS Mods URL
+        bis_url = WarframeAPI.get_bis_mods(full_name)
+        self.finished.emit(summary_html, bis_url)
 
 class OverlayController(QObject):
     toggle_requested = pyqtSignal()
@@ -75,35 +109,33 @@ class OverlayController(QObject):
         self.app.quit()
 
     def handle_search(self, query):
-        self.overlay.update_search_results(f"Searching for '{query}'...")
-        
-        # Price Check
-        price_text, full_name = WarframeAPI.get_market_item_price(query)
-        
-        # Wiki Info
-        wiki_text = WarframeAPI.get_wiki_info(full_name)
-        
-        # Drop / Acqusition Info
-        drop_text = WarframeAPI.get_drop_locations(full_name)
-
-        # Compile HTML for Summary
-        summary_html = f"""
+        # Update UI to show searching status
+        loading_html = f"""
         <style>
-            h3 {{ margin-top: 0; margin-bottom: 5px; color: #00d2ff; font-size: 14px; }}
-            div {{ margin-bottom: 10px; }}
-            b {{ color: #eee; }}
+            .loading {{ color: #00d2ff; font-size: 14px; font-weight: bold; }}
+            .sub {{ color: #888; font-size: 12px; }}
         </style>
-        <h2 style='color: #fff; margin-bottom: 10px;'>{full_name}</h2>
-        <div>{price_text}</div>
-        <div>{drop_text}</div>
-        <div style='font-size: 11px;'>{wiki_text}</div>
+        <br><br>
+        <div align='center'>
+            <div class='loading'>Searching for '{query}'...</div>
+            <div class='sub'>Fetching Market Data...</div>
+            <div class='sub'>Querying Wiki...</div>
+            <div class='sub'>Locating Drop Tables...</div>
+            <div class='sub'>Finding Builds...</div>
+        </div>
         """
+        self.overlay.update_search_results(loading_html)
         
+        # Start background thread
+        self.search_worker = SearchWorker(query)
+        self.search_worker.finished.connect(self.on_search_completed)
+        self.search_worker.start()
+
+    def on_search_completed(self, summary_html, bis_url):
         # Update Search Tab (Top Section)
         self.overlay.update_search_results(summary_html)
         
         # BiS Mods URL (Bottom Section - Auto loads into Search Tab Webview)
-        bis_url = WarframeAPI.get_bis_mods(full_name)
         if bis_url.startswith("http"):
             self.overlay.load_build_url(bis_url)
         else:
