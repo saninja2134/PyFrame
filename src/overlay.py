@@ -129,47 +129,36 @@ class WarframeOverlay(QMainWindow):
         self.layout_activities.addWidget(self.activities_label)
         scroll_act.setWidget(self.content_activities)
 
-        # --- Tab 3: Search (Market, Wiki) ---
+        # --- Tab 3: Search (Market, Wiki, Builds) ---
         self.tab_search = QWidget()
         self.tabs.addTab(self.tab_search, "Search")
         self.layout_search = QVBoxLayout(self.tab_search)
+        self.layout_search.setContentsMargins(0, 0, 0, 0)
+        self.layout_search.setSpacing(0)
 
-        scroll_search = QScrollArea()
-        scroll_search.setWidgetResizable(True)
-        scroll_search.setStyleSheet("background: transparent; border: none;")
-        
+        # Top Section: Search Summary
         self.search_results_label = QTextBrowser()
         self.search_results_label.setOpenExternalLinks(True)
-        self.search_results_label.setStyleSheet("background: transparent; border: none; color: #ddd; font-size: 13px;")
+        self.search_results_label.setStyleSheet("background: transparent; border-bottom: 1px solid #444; color: #ddd; font-size: 13px; padding: 10px;")
         self.search_results_label.setHtml("Enter item name above...")
+        self.search_results_label.setMaximumHeight(200)
+        self.layout_search.addWidget(self.search_results_label)
         
-        scroll_search.setWidget(self.search_results_label)
-        self.layout_search.addWidget(scroll_search)
-
-        # --- Tab 4: Reference (Web View) ---
-        self.tab_ref = QWidget()
-        self.tabs.addTab(self.tab_ref, "Info")
-        self.layout_ref = QVBoxLayout(self.tab_ref)
-        self.layout_ref.setContentsMargins(0, 0, 0, 0)
-        self.layout_ref.setSpacing(0)
-        
-        # Top Section: Info Summary (Wiki, Market, etc.)
-        self.ref_text = QTextBrowser()
-        self.ref_text.setStyleSheet("background: transparent; color: #ddd; font-size: 12px; padding: 10px; border-bottom: 1px solid #444;")
-        self.ref_text.setOpenExternalLinks(True)
-        # Set a fixed or max height so it doesn't dominate, e.g. 30% of height
-        self.ref_text.setMaximumHeight(200) 
-        self.layout_ref.addWidget(self.ref_text)
-
         # Bottom Section: Build (Web View)
         self.web_view = QWebEngineView()
         self.web_view.setStyleSheet("background: transparent;")
         self.web_view.page().setBackgroundColor(Qt.GlobalColor.transparent)
-        self.layout_ref.addWidget(self.web_view)
+        self.layout_search.addWidget(self.web_view)
+
+        # --- Tab 4: Reference (Static Info) ---
+        self.tab_ref = QWidget()
+        self.tabs.addTab(self.tab_ref, "Info")
+        self.layout_ref = QVBoxLayout(self.tab_ref)
         
-        # Set stretch to prioritize web view
-        self.layout_ref.setStretch(0, 0) # Natural size for text
-        self.layout_ref.setStretch(1, 1) # Expand web view
+        self.ref_text = QTextBrowser()
+        self.ref_text.setStyleSheet("background: transparent; color: #ddd; font-size: 12px; border: none;")
+        self.ref_text.setOpenExternalLinks(True)
+        self.layout_ref.addWidget(self.ref_text)
 
         # --- Tab 5: Notes ---
         self.tab_notes = QWidget()
@@ -196,8 +185,8 @@ class WarframeOverlay(QMainWindow):
     def load_build_url(self, url):
         self.web_view.load(QUrl(url))
         self.web_view.loadFinished.connect(self._inject_cleanup_script)
-        # Switch to this tab
-        self.tabs.setCurrentWidget(self.tab_ref)
+        # Switch to Search tab which now holds the view
+        self.tabs.setCurrentWidget(self.tab_search)
 
     def _inject_cleanup_script(self, success):
         if not success: return

@@ -99,13 +99,10 @@ class OverlayController(QObject):
         <div style='font-size: 11px;'>{wiki_text}</div>
         """
         
-        # Update Info Tab (Top Section)
-        self.overlay.set_reference_text(summary_html)
-        
-        # Update Search Tab (optional, but good for history)
+        # Update Search Tab (Top Section)
         self.overlay.update_search_results(summary_html)
-
-        # BiS Mods URL (Bottom Section)
+        
+        # BiS Mods URL (Bottom Section - Auto loads into Search Tab Webview)
         bis_url = WarframeAPI.get_bis_mods(full_name)
         if bis_url.startswith("http"):
             self.overlay.load_build_url(bis_url)
