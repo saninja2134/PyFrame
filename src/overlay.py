@@ -235,10 +235,15 @@ class WarframeOverlay(QMainWindow):
     def _inject_cleanup_script(self, success):
         if not success: return
         
-        # CSS to isolate the build calculator
+        # CSS to isolate the build calculator and force Dark Mode
         css = """
-            ::-webkit-scrollbar { display: none; }
-            body { overflow: hidden !important; background: #14141e !important; }
+            /* Custom Scrollbar */
+            ::-webkit-scrollbar { width: 8px; }
+            ::-webkit-scrollbar-track { background: #14141e; }
+            ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+            ::-webkit-scrollbar-thumb:hover { background: #555; }
+
+            body { overflow: hidden !important; background: #14141e !important; color: #ddd !important; }
             
             /* Hide everything initially */
             body > * { visibility: hidden; }
@@ -253,10 +258,18 @@ class WarframeOverlay(QMainWindow):
                 width: 100% !important;
                 height: 100% !important;
                 z-index: 99999;
-                background-color: #14141e;
+                background-color: #14141e !important;
+                color: #ddd !important;
                 overflow-y: auto;
                 padding: 10px;
             }
+            
+            /* Theme Consistency Overrides */
+            h1, h2, h3, h4, h5, h6, p, span, div, label { color: #eeeeee !important; }
+            a { color: #00d2ff !important; }
+            
+            /* Material UI specific fixes if Overframe uses it */
+            .MuiPaper-root { background-color: #222 !important; color: #ddd !important; }
             
             /* Ensure parents are visible for the child to see */
             #__next { visibility: visible !important; }
