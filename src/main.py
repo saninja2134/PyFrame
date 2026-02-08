@@ -1,4 +1,5 @@
 import sys
+from datetime import datetime, timezone
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
 from overlay import WarframeOverlay
@@ -14,6 +15,10 @@ class OverlayController(QObject):
         self.app = QApplication(sys.argv)
         self.overlay = WarframeOverlay()
         self.visible = True
+        
+        # State storage for cycles
+        self.cycle_data = {}
+        self.nightwave_html = ""
         
         # Initialize Reference Tab
         self.overlay.set_reference_text(WarframeReference.DAMAGE_TABLE)
@@ -33,10 +38,15 @@ class OverlayController(QObject):
         })
         self.listener.start()
 
-        # Setup timer for periodic updates
-        self.timer = QTimer()
-        self.timer.timeout.connect(self.update_world_data)
-        self.timer.start(120000)  # Update world state every 2 mins
+        # Timer for data fetching (Sync every 2 mins)
+        self.fetch_timer = QTimer()
+        self.fetch_timer.timeout.connect(self.update_world_data)
+        self.fetch_timer.start(120000)
+
+        # Timer for UI countdowns (Every 1 second)
+        self.ui_timer = QTimer()
+        self.ui_timer.timeout.connect(self.update_cycle_display)
+        self.ui_timer.start(1000)
 
         self.update_world_data()
 
@@ -101,49 +111,106 @@ class OverlayController(QObject):
             # Load Overframe home or search if no direct hit
             self.overlay.load_build_url(bis_url if "http" in bis_url else "https://overframe.gg")
 
+    def parse_time(self, time_str):
+        if not time_str: return None
+        try:
+            # Handle ISO strings (e.g., 2026-02-08T20:00:00.558Z)
+            return datetime.fromisoformat(time_str.replace('Z', '+00:00'))
+        except:
+            return None
+
+    def update_cycle_display(self):
+        if not self.cycle_data: return
+
+        now = datetime.now(timezone.utc)
+        cycle_lines = []
+        needs_refresh = False
+
+        term_map = {
+            'earth': 'Earth', 'cetus': 'Cetus', 'vallis': 'Vallis', 
+            'cambion': 'Cambion', 'zariman': 'Zariman'
+        }
+
+        cycle_lines.append("<b>Cycles:</b>")
+        
+        for key, label in term_map.items():
+            info = self.cycle_data.get(key)
+            if not info:
+                cycle_lines.append(f"{label}: N/A")
+                continue
+            
+            expiry = info.get('expiry')
+            state_str = info.get('state', 'Unknown').capitalize()
+
+            if expiry:
+                delta = expiry - now
+                if delta.total_seconds() <= 0:
+                    needs_refresh = True
+                    time_str = "Updating..."
+                else:
+                    # Format time left
+                    total_seconds = int(delta.total_seconds())
+                    hours = total_seconds // 3600
+                    minutes = (total_seconds % 3600) // 60
+                    seconds = total_seconds % 60
+                    
+                    parts = []
+                    if hours > 0: parts.append(f"{hours}h")
+                    parts.append(f"{minutes}m")
+                    parts.append(f"{seconds}s")
+                    time_str = " ".join(parts)
+                
+                cycle_lines.append(f"{label}: {state_str} ({time_str})")
+            else:
+                cycle_lines.append(f"{label}: {state_str}")
+
+        if needs_refresh:
+            self.update_world_data()
+            return
+
+        final_html = "<br>".join(cycle_lines) + "<br><br>" + self.nightwave_html
+        self.overlay.update_cycles_tab(final_html)
+
     def update_world_data(self):
         # Fetch world state info
         state = WarframeAPI.get_world_state()
         if state:
             try:
                 # --- Tab 1: Cycles ---
-                # Earth
-                e = state.get('earthCycle', {})
-                earth = f"{e.get('state', 'Unknown').capitalize()} ({e.get('timeLeft', '')})"
+                # Store Data for Local Countdown
+                self.cycle_data = {
+                    'earth': {
+                        'state': state.get('earthCycle', {}).get('state', 'Unknown'),
+                        'expiry': self.parse_time(state.get('earthCycle', {}).get('expiry'))
+                    },
+                    'cetus': {
+                        'state': state.get('cetusCycle', {}).get('state', 'Unknown'),
+                        'expiry': self.parse_time(state.get('cetusCycle', {}).get('expiry'))
+                    },
+                    'vallis': {
+                        'state': state.get('vallisCycle', {}).get('state', 'Unknown'),
+                        'expiry': self.parse_time(state.get('vallisCycle', {}).get('expiry'))
+                    },
+                    'cambion': {
+                        'state': state.get('cambionCycle', {}).get('active', state.get('cambionCycle', {}).get('state', 'Unknown')),
+                        'expiry': self.parse_time(state.get('cambionCycle', {}).get('expiry'))
+                    },
+                    'zariman': {
+                        'state': state.get('zarimanCycle', {}).get('state', 'Unknown'),
+                        'expiry': self.parse_time(state.get('zarimanCycle', {}).get('expiry'))
+                    }
+                }
                 
-                # Cetus
-                c = state.get('cetusCycle', {})
-                cetus = f"{c.get('state', 'Unknown').capitalize()} ({c.get('timeLeft', '')})"
-                
-                # Vallis (might not have timeLeft, depends on provider state)
-                v = state.get('vallisCycle', {})
-                vallis = f"{v.get('state', 'Unknown').capitalize()} ({v.get('timeLeft', '')})" if v.get('timeLeft') else v.get('state', 'Unknown').capitalize()
-                
-                # Cambion
-                cam = state.get('cambionCycle', {})
-                cambion = f"{cam.get('active', cam.get('state', 'Unknown')).capitalize()} ({cam.get('timeLeft', '')})"
-                
-                # Zariman
-                z = state.get('zarimanCycle', {})
-                zariman = f"{z.get('state', 'Unknown').capitalize()} ({z.get('timeLeft', '')})"
-                
-                cycles_text = (
-                    f"<b>Cycles:</b><br>"
-                    f"Earth: {earth}<br>"
-                    f"Cetus: {cetus}<br>"
-                    f"Vallis: {vallis}<br>"
-                    f"Cambion: {cambion}<br>"
-                    f"Zariman: {zariman}<br><br>"
-                )
-                
-                # Nightwave
+                # Nightwave (Static until next fetch)
                 nw = state.get('nightwave')
+                self.nightwave_html = ""
                 if nw and nw.get('activeChallenges'):
-                    cycles_text += "<b>Nightwave:</b><br>"
+                    self.nightwave_html += "<b>Nightwave:</b><br>"
                     for c in nw['activeChallenges'][:3]:
-                        cycles_text += f"- {c['title']} ({c['reputation']})<br>"
+                        self.nightwave_html += f"- {c['title']} ({c['reputation']})<br>"
                 
-                self.overlay.update_cycles_tab(cycles_text)
+                # Trigger immediate UI update with new data
+                self.update_cycle_display()
 
                 # --- Tab 2: Activities ---
                 activities_text = ""
