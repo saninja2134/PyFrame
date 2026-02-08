@@ -1,9 +1,47 @@
 import sys
+import ctypes
+from ctypes import c_int, byref, sizeof, Structure, c_void_p, windll, POINTER
+from ctypes.wintypes import HWND, DWORD, ULONG
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QLineEdit, QScrollArea, QFrame, QTabWidget, QTextEdit, QTextBrowser, QHBoxLayout, QPushButton
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QUrl
 from PyQt6.QtGui import QScreen
 from config import ConfigManager
+
+# --- DWM Structures for Acrylic/Blur ---
+class ACCENT_POLICY(Structure):
+    _fields_ = [
+        ("AccentState", DWORD),
+        ("AccentFlags", DWORD),
+        ("GradientColor", DWORD),
+        ("AnimationId", DWORD)
+    ]
+
+class WINDOWCOMPOSITIONATTRIBDATA(Structure):
+    _fields_ = [
+        ("Attribute", DWORD),
+        ("Data", POINTER(ACCENT_POLICY)),
+        ("SizeOfData", ULONG)
+    ]
+
+def enable_acrylic(hwnd):
+    try:
+        policy = ACCENT_POLICY()
+        # 3 = ACCENT_ENABLE_BLURBEHIND (Aero Blur), 4 = ACCENT_ENABLE_ACRYLICBLURBEHIND (Windows 10 Acrylic)
+        # Using 3 is safer and looks consistent. Use 4 with a gradient color for Acrylic.
+        # Let's try 3 first as it's cleaner, or 4 with a fallback.
+        policy.AccentState = 3 
+        policy.GradientColor = 0 # 0xCC000000 
+        
+        data = WINDOWCOMPOSITIONATTRIBDATA()
+        data.Attribute = 19 # WCA_ACCENT_POLICY
+        data.Data = ctypes.pointer(policy)
+        data.SizeOfData = sizeof(policy)
+        
+        user32 = ctypes.windll.user32
+        user32.SetWindowCompositionAttribute(hwnd, byref(data))
+    except Exception as e:
+        print(f"Failed to enable Acrylic: {e}")
 
 class WarframeOverlay(QMainWindow):
     search_triggered = pyqtSignal(str)
@@ -23,6 +61,9 @@ class WarframeOverlay(QMainWindow):
             Qt.WindowType.Tool
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
+        
+        # Apply Acrylic/Blur Effect
+        enable_acrylic(int(self.winId()))
         
         # Position the overlay from config
         geo = self.config.get("window", {})
@@ -52,7 +93,7 @@ class WarframeOverlay(QMainWindow):
         self.container = QFrame()
         self.container.setStyleSheet("""
             QFrame {
-                background-color: rgba(20, 20, 30, 240);
+                background-color: rgba(20, 20, 30, 180);
                 border: 1px solid #444;
                 border-radius: 10px;
                 color: #ddd;
