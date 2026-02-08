@@ -86,6 +86,25 @@ class WarframeOverlay(QMainWindow):
         
         header_layout.addStretch()
         
+        # Minimize Button
+        min_btn = QPushButton("─")
+        min_btn.setFixedSize(24, 24)
+        min_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        min_btn.setStyleSheet("""
+            QPushButton {
+                background: transparent;
+                color: #888;
+                border: none;
+                font-weight: bold;
+                font-size: 14px;
+            }
+            QPushButton:hover {
+                color: #00d2ff;
+            }
+        """)
+        min_btn.clicked.connect(self.hide)
+        header_layout.addWidget(min_btn)
+
         close_btn = QPushButton("✕")
         close_btn.setFixedSize(24, 24)
         close_btn.setCursor(Qt.CursorShape.PointingHandCursor)
