@@ -2,11 +2,12 @@ import sys
 import ctypes
 from ctypes import c_int, byref, sizeof, Structure, c_void_p, windll, POINTER
 from ctypes.wintypes import HWND, DWORD, ULONG
-from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QLineEdit, QScrollArea, QFrame, QTabWidget, QTextEdit, QTextBrowser, QHBoxLayout, QPushButton
+from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QLineEdit, QScrollArea, QFrame, QTabWidget, QTextEdit, QTextBrowser, QHBoxLayout, QPushButton, QCompleter
 from PyQt6.QtWebEngineWidgets import QWebEngineView
-from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QUrl
+from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QUrl, QStringListModel
 from PyQt6.QtGui import QScreen
 from config import ConfigManager
+from api_clients import OVERFRAME_CACHE
 
 # --- DWM Structures for Acrylic/Blur ---
 class ACCENT_POLICY(Structure):
@@ -182,6 +183,9 @@ class WarframeOverlay(QMainWindow):
         self.search_input.returnPressed.connect(self.handle_search)
         main_layout.addWidget(self.search_input)
 
+        # Autocomplete (Fuzzy Search)
+        self.setup_autocomplete()
+
         # Tabs
         self.tabs = QTabWidget()
         main_layout.addWidget(self.tabs)
@@ -266,6 +270,42 @@ class WarframeOverlay(QMainWindow):
         footer = QLabel("Ctrl+Alt+O = Toggle | Ctrl+Alt+X = Exit")
         footer.setStyleSheet("color: #666; font-size: 10px; border: none; margin-top: 5px;")
         main_layout.addWidget(footer)
+
+    def setup_autocomplete(self):
+        # Prepare list from cache (converting to Title Case for better UI)
+        if not OVERFRAME_CACHE:
+            return
+
+        items = [k.title() for k in OVERFRAME_CACHE.keys()]
+        items.sort()
+
+        completer = QCompleter(items, self.search_input)
+        completer.setCaseSensitivity(Qt.CaseSensitivity.CaseInsensitive)
+        completer.setFilterMode(Qt.MatchFlag.MatchContains)
+        
+        # Style the popup
+        popup = completer.popup()
+        popup.setStyleSheet("""
+            QListView {
+                background-color: #222;
+                color: #ddd;
+                border: 1px solid #444;
+                font-size: 13px;
+                selection-background-color: #00d2ff;
+                selection-color: #222;
+            }
+            QScrollBar:vertical {
+                border: none;
+                background: #222;
+                width: 8px;
+            }
+            QScrollBar::handle:vertical {
+                background: #555;
+                border-radius: 4px;
+            }
+        """)
+        
+        self.search_input.setCompleter(completer)
 
     def load_build_url(self, url):
         self.web_view.load(QUrl(url))
