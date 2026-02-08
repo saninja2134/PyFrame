@@ -1,4 +1,5 @@
 import sys
+import time
 from datetime import datetime, timezone
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal
@@ -19,6 +20,7 @@ class OverlayController(QObject):
         # State storage for cycles
         self.cycle_data = {}
         self.nightwave_html = ""
+        self.last_fetch_time = 0
         
         # Initialize Reference Tab
         self.overlay.set_reference_text(WarframeReference.DAMAGE_TABLE)
@@ -165,8 +167,11 @@ class OverlayController(QObject):
                 cycle_lines.append(f"{label}: {state_str}")
 
         if needs_refresh:
-            self.update_world_data()
-            return
+            # Prevent spamming API (Cooldown of 60s)
+            # If a cycle ends, it needs a bit to update serverside anyway
+            if time.time() - self.last_fetch_time > 60:
+                print("Cycle expired, refreshing...")
+                self.update_world_data()
 
         final_html = "<br>".join(cycle_lines) + "<br><br>" + self.nightwave_html
         self.overlay.update_cycles_tab(final_html)
@@ -174,6 +179,8 @@ class OverlayController(QObject):
     def update_world_data(self):
         # Fetch world state info
         state = WarframeAPI.get_world_state()
+        self.last_fetch_time = time.time()
+        
         if state:
             try:
                 # --- Tab 1: Cycles ---
@@ -209,7 +216,7 @@ class OverlayController(QObject):
                     for c in nw['activeChallenges'][:3]:
                         self.nightwave_html += f"- {c['title']} ({c['reputation']})<br>"
                 
-                # Trigger immediate UI update with new data
+                # Update Activities directly
                 self.update_cycle_display()
 
                 # --- Tab 2: Activities ---
@@ -257,6 +264,9 @@ class OverlayController(QObject):
             except Exception as e:
                 err_msg = f"Error parsing state: {e}"
                 self.overlay.update_cycles_tab(err_msg)
+        else:
+            self.overlay.update_cycles_tab("Failed to fetch world state data.<br>Check internet connection.")
+            self.overlay.update_activities_tab("Failed to fetch world state.")
 
     def run(self):
         self.overlay.show()
