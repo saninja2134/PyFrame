@@ -146,12 +146,14 @@ class OverlayController(QObject):
 
             if expiry:
                 delta = expiry - now
-                if delta.total_seconds() <= 0:
+                total_seconds = int(delta.total_seconds())
+
+                if total_seconds <= 0:
                     needs_refresh = True
-                    time_str = "Updating..."
+                    # Just show 0s or Validating if it's lagging behind
+                    time_str = "Syncing..."
                 else:
                     # Format time left
-                    total_seconds = int(delta.total_seconds())
                     hours = total_seconds // 3600
                     minutes = (total_seconds % 3600) // 60
                     seconds = total_seconds % 60
@@ -167,9 +169,9 @@ class OverlayController(QObject):
                 cycle_lines.append(f"{label}: {state_str}")
 
         if needs_refresh:
-            # Prevent spamming API (Cooldown of 60s)
+            # Prevent spamming API (Cooldown of 15s)
             # If a cycle ends, it needs a bit to update serverside anyway
-            if time.time() - self.last_fetch_time > 60:
+            if time.time() - self.last_fetch_time > 15:
                 print("Cycle expired, refreshing...")
                 self.update_world_data()
 

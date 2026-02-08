@@ -160,7 +160,12 @@ class WarframeAPI:
     def get_world_state():
         try:
             # We use the 'en' locale for consistent naming
-            response = requests.get(f"{WarframeAPI.WORLD_STATE_URL}/?language=en")
+            # Disable verify to fix common SSL cert issues on some windows machines with this specific API
+            # Add Cache-Control to prevent stale data
+            # Add timestamp to force fresh fetch
+            import time
+            headers = {'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
+            response = requests.get(f"{WarframeAPI.WORLD_STATE_URL}/?language=en&_={int(time.time())}", verify=False, headers=headers)
             return response.json() if response.status_code == 200 else None
         except Exception as e:
             print(f"Error fetching world state: {e}")
