@@ -1,5 +1,7 @@
 import sys
 import time
+import requests
+import base64
 from datetime import datetime, timezone
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal, QThread
@@ -16,13 +18,23 @@ class SearchWorker(QThread):
 
     def run(self):
         # Price Check
-        price_text, full_name = WarframeAPI.get_market_item_price(self.query)
+        price_text, full_name, icon_url = WarframeAPI.get_market_item_price(self.query)
         
         # Wiki Info
         wiki_text = WarframeAPI.get_wiki_info(full_name)
         
         # Drop / Acqusition Info
         drop_text = WarframeAPI.get_drop_locations(full_name)
+
+        # Fetch Icon (if available) -> Convert to Base64 for async display
+        img_html = ""
+        if icon_url:
+            try:
+                img_data = requests.get(icon_url).content
+                b64_img = base64.b64encode(img_data).decode('utf-8')
+                img_html = f"<img src='data:image/png;base64,{b64_img}' width='64' height='64' style='float:left; margin-right:10px; border-radius:5px;'>"
+            except:
+                pass
 
         # Compile HTML for Summary
         summary_html = f"""
@@ -31,8 +43,12 @@ class SearchWorker(QThread):
             div {{ margin-bottom: 10px; }}
             b {{ color: #eee; }}
         </style>
-        <h2 style='color: #fff; margin-bottom: 10px;'>{full_name}</h2>
-        <div>{price_text}</div>
+        <div style="overflow: auto;">
+            {img_html}
+            <h2 style='color: #fff; margin-bottom: 1px; margin-top: 0px;'>{full_name}</h2>
+            <div style='margin-bottom: 5px;'>{price_text}</div>
+        </div>
+        <div style="clear: both;"></div>
         <div>{drop_text}</div>
         <div style='font-size: 11px;'>{wiki_text}</div>
         """

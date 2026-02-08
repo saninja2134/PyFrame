@@ -245,7 +245,24 @@ class WarframeAPI:
         
         def fetch_price(url_key, display_name):
             try:
-                # Get orders directly
+                # 1. Fetch Icon (Optional)
+                icon_url = None
+                try:
+                    info_url = f"{WarframeAPI.MARKET_BASE_URL}/items/{url_key}"
+                    info_resp = requests.get(info_url, headers=headers)
+                    if info_resp.status_code == 200:
+                        payload = info_resp.json().get('payload', {}).get('item', {})
+                        items_in_set = payload.get('items_in_set', [])
+                        # Find the item that matches the url_key or just the first one
+                        target_item = next((i for i in items_in_set if i.get('url_name') == url_key), None)
+                        if not target_item and items_in_set: target_item = items_in_set[0]
+                        
+                        if target_item:
+                            icon_url = f"https://warframe.market/static/assets/{target_item.get('thumb')}"
+                except:
+                    pass # Ignore icon errors
+
+                # 2. Get orders
                 url = f"{WarframeAPI.MARKET_BASE_URL}/items/{url_key}/orders"
                 response = requests.get(url, headers=headers)
                 
@@ -255,11 +272,15 @@ class WarframeAPI:
                 if response.status_code == 200:
                     orders = response.json().get('payload', {}).get('orders', [])
                     online_orders = [o for o in orders if o['user']['status'] == 'ingame' and o['order_type'] == 'sell']
+                    
+                    price_str = ""
                     if online_orders:
                         price = min(o['platinum'] for o in online_orders)
-                        return f"<b>Market Price:</b> <span style='color:#00ff88; font-size:14px;'>{price}p</span> (Lowest Online)"
+                        price_str = f"<b>Market Price:</b> <span style='color:#00ff88; font-size:14px;'>{price}p</span> (Lowest Online)"
                     else:
-                        return "<b>Market Price:</b> No players in-game."
+                        price_str = "<b>Market Price:</b> No players in-game."
+                    
+                    return price_str, icon_url
                 return None
             except:
                 return None
@@ -269,20 +290,20 @@ class WarframeAPI:
         # But for non-prime, "volt" isn't tradeable.
         
         res = fetch_price(clean_name, item_name)
-        if res: return res, item_name
+        if res: return res[0], item_name, res[1]
         
         # 2. Try adding "_set"
         res = fetch_price(f"{clean_name}_set", item_name)
-        if res: return res, item_name
+        if res: return res[0], item_name, res[1]
 
         # 3. If original was not prime, try finding Prime variant
         if "prime" not in clean_name:
             prime_name_url = f"{clean_name}_prime_set"
             res = fetch_price(prime_name_url, item_name + " Prime")
             if res:
-                return f"{res} (Prime Set)", item_name + " Prime"
+                return f"{res[0]} (Prime Set)", item_name + " Prime", res[1]
 
-        return "<b>Market Price:</b> Item not tradeable or not found.", item_name
+        return "<b>Market Price:</b> Item not tradeable or not found.", item_name, None
 
     @staticmethod
     def get_wiki_info(item_name):
