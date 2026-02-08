@@ -3,6 +3,10 @@ from bs4 import BeautifulSoup
 import json
 import os
 import re
+import urllib3
+
+# Suppress SSL warnings since we use verify=False for stability
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
 
 # Load Overframe Cache
 CACHE_FILE = os.path.join(os.path.dirname(__file__), 'data', 'overframe_cache.json')

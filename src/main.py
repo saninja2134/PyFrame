@@ -75,6 +75,8 @@ class OverlayController(QObject):
         # State storage for cycles
         self.cycle_data = {}
         self.nightwave_html = ""
+        self.activities_static_html = ""
+        self.fissures_data = []
         self.last_fetch_time = 0
         
         # Initialize Reference Tab
@@ -240,6 +242,45 @@ class OverlayController(QObject):
 
         final_html = "<br>".join(cycle_lines) + "<br><br>" + self.nightwave_html
         self.overlay.update_cycles_tab(final_html)
+        
+        # --- Update Fissures (Live Countdown) ---
+        if self.fissures_data:
+            fissure_html = "<b>Active Fissures:</b><br>"
+            
+            # Sort fissures by tier, then expiry
+            tier_order = {'Lith': 1, 'Meso': 2, 'Neo': 3, 'Axi': 4, 'Requiem': 5, 'Omni': 6}
+            
+            # Filter and Sort
+            active = [f for f in self.fissures_data if f['expiry'] and f['expiry'] > now]
+            active.sort(key=lambda x: (tier_order.get(x['tier'], 99), x['expiry']))
+            
+            current_tier = None
+            for f in active:
+                tier = f['tier']
+                if tier != current_tier:
+                    current_tier = tier
+                    fissure_html += f"<div style='margin-top:5px; margin-bottom:2px; font-weight:bold; color:#aaa;'>--- {tier} ---</div>"
+                
+                # Time Left
+                delta = f['expiry'] - now
+                minutes = int(delta.total_seconds() // 60)
+                
+                # Format
+                mission = f.get('missionType', 'Unknown')
+                node = f.get('node', 'Unknown')
+                enemy = f.get('enemy', '')
+                
+                modifiers = []
+                if f.get('isHard'): modifiers.append("SP")
+                if f.get('isStorm'): modifiers.append("Storm")
+                mod_str = f" <span style='color:#ff5555; font-size:10px;'>{' '.join(modifiers)}</span>" if modifiers else ""
+                
+                fissure_html += f"<div style='font-size:11px;'>{mission} - {node} ({enemy}){mod_str} <span style='color:#00d2ff;'>{minutes}m</span></div>"
+            
+            # Combine static + dynamic
+            self.overlay.update_activities_tab(self.activities_static_html + fissure_html)
+        else:
+            self.overlay.update_activities_tab(self.activities_static_html)
 
     def process_world_state(self, state):
         """Updates UI with the provided world state dictionary."""
@@ -280,49 +321,59 @@ class OverlayController(QObject):
                     self.nightwave_html += f"- {c['title']} ({c['reputation']})<br>"
             
             # Update Activities directly
-            self.update_cycle_display()
-
-            # --- Tab 2: Activities ---
-            activities_text = ""
+            
+            # --- Tab 2: Activities (Static Parts) ---
+            self.activities_static_html = ""
             
             # Sortie
             sortie = state.get('sortie', {})
             if sortie:
                 boss = sortie.get('boss', 'Unknown')
                 faction = sortie.get('faction', 'Unknown')
-                activities_text += f"<b>Sortie ({boss} - {faction}):</b><br>"
+                self.activities_static_html += f"<b>Sortie ({boss} - {faction}):</b><br>"
                 for idx, mission in enumerate(sortie.get('variants', []), 1):
-                    activities_text += f"{idx}. {mission['missionType']} - {mission.get('modifier', 'None')}<br>"
-                activities_text += "<br>"
+                    self.activities_static_html += f"{idx}. {mission['missionType']} - {mission.get('modifier', 'None')}<br>"
+                self.activities_static_html += "<br>"
 
             # Archon Hunt
             archon = state.get('archonHunt', {})
             if archon:
                 boss = archon.get('boss', 'Unknown')
-                activities_text += f"<b>Archon Hunt ({boss}):</b><br>"
+                self.activities_static_html += f"<b>Archon Hunt ({boss}):</b><br>"
                 for idx, mission in enumerate(archon.get('variants', []), 1):
-                    activities_text += f"{idx}. {mission['missionType']}<br>"
-                activities_text += "<br>"
+                    self.activities_static_html += f"{idx}. {mission['missionType']}<br>"
+                self.activities_static_html += "<br>"
 
             # Void Trader
             trader = state.get('voidTrader', {})
-            activities_text += f"<b>Void Trader:</b><br>{WarframeAPI.process_void_trader(trader)}<br><br>"
+            self.activities_static_html += f"<b>Void Trader:</b><br>{WarframeAPI.process_void_trader(trader)}<br><br>"
 
             # Invasions
             invasions = WarframeAPI.process_invasions(state.get('invasions', []))
             if invasions:
-                activities_text += "<b>Interesting Invasions:</b><br>"
+                self.activities_static_html += "<b>Interesting Invasions:</b><br>"
                 for inv in invasions:
-                    activities_text += f"- {inv}<br>"
-                activities_text += "<br>"
+                    self.activities_static_html += f"- {inv}<br>"
+                self.activities_static_html += "<br>"
 
-            # Fissures (only non-standard/SP/Storms or just basic summary)
-            # Let's show active fissures counts or high tier ones
-            fissures = state.get('fissures', [])
-            if fissures:
-                activities_text += f"<b>Active Fissures: {len(fissures)}</b><br>"
-            
-            self.overlay.update_activities_tab(activities_text)
+            # Fissures (Store Raw Data)
+            # Store necessary fields: tier, missionType, node, enemy, expiry, isHard, isStorm
+            raw_fissures = state.get('fissures', [])
+            self.fissures_data = []
+
+            for f in raw_fissures:
+                self.fissures_data.append({
+                    'tier': f.get('tier'),
+                    'missionType': f.get('missionType'),
+                    'node': f.get('node'),
+                    'enemy': f.get('enemy'),
+                    'expiry': self.parse_time(f.get('expiry')),
+                    'isHard': f.get('isHard', False),
+                    'isStorm': f.get('isStorm', False)
+                })
+
+            # Force UI update immediately
+            self.update_cycle_display()
 
         except Exception as e:
             err_msg = f"Error parsing state: {e}"
