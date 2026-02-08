@@ -107,18 +107,32 @@ class OverlayController(QObject):
         if state:
             try:
                 # --- Tab 1: Cycles ---
-                cycle = state.get('earthCycle', {}).get('shortString', 'N/A')
-                cetus = state.get('cetusCycle', {}).get('shortString', 'N/A')
-                vallis = state.get('vallisCycle', {}).get('shortString', 'N/A')
-                cambion = state.get('cambionCycle', {}).get('active', 'N/A')
-                zariman = state.get('zarimanCycle', {}).get('shortString', 'N/A')
+                # Earth
+                e = state.get('earthCycle', {})
+                earth = f"{e.get('state', 'Unknown').capitalize()} ({e.get('timeLeft', '')})"
+                
+                # Cetus
+                c = state.get('cetusCycle', {})
+                cetus = f"{c.get('state', 'Unknown').capitalize()} ({c.get('timeLeft', '')})"
+                
+                # Vallis (might not have timeLeft, depends on provider state)
+                v = state.get('vallisCycle', {})
+                vallis = f"{v.get('state', 'Unknown').capitalize()} ({v.get('timeLeft', '')})" if v.get('timeLeft') else v.get('state', 'Unknown').capitalize()
+                
+                # Cambion
+                cam = state.get('cambionCycle', {})
+                cambion = f"{cam.get('active', cam.get('state', 'Unknown')).capitalize()} ({cam.get('timeLeft', '')})"
+                
+                # Zariman
+                z = state.get('zarimanCycle', {})
+                zariman = f"{z.get('state', 'Unknown').capitalize()} ({z.get('timeLeft', '')})"
                 
                 cycles_text = (
                     f"<b>Cycles:</b><br>"
-                    f"Earth: {cycle}<br>"
+                    f"Earth: {earth}<br>"
                     f"Cetus: {cetus}<br>"
                     f"Vallis: {vallis}<br>"
-                    f"Cambion: {cambion.capitalize()}<br>"
+                    f"Cambion: {cambion}<br>"
                     f"Zariman: {zariman}<br><br>"
                 )
                 

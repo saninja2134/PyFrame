@@ -171,13 +171,13 @@ class WarframeAPI:
         # Filter mostly for "good" rewards: Potatoes, Forma, Wraith/Vandal parts
         interesting = []
         for inv in invasions:
-            if inv['completed']: continue
+            if inv.get('completed', False): continue
             
             rewards = []
             for side in ['attacker', 'defender']:
                 reward = inv.get(f'{side}Reward', {}).get('asString', '')
                 if any(x in reward.lower() for x in ['catalyst', 'reactor', 'forma', 'vandal', 'wraith', 'mutagen mass', 'fieldron', 'detonite', 'exilus', 'adapter']):
-                    rewards.append(f"{reward} ({inv['node']})")
+                    rewards.append(f"{reward} ({inv.get('node', 'Unknown')})")
             
             if rewards:
                 interesting.extend(rewards)
@@ -186,14 +186,17 @@ class WarframeAPI:
     @staticmethod
     def process_void_trader(void_trader):
         if not void_trader: return "Unknown"
-        if void_trader['active']:
+        if void_trader.get('active', False):
             # If active, list inventory
-            inventory_str = f"Baro is at {void_trader['location']}!<br>Inventory:<br>"
+            inventory_str = f"Baro is at {void_trader.get('location', 'Unknown')}!<br>Inventory:<br>"
             for item in void_trader.get('inventory', []):
-                inventory_str += f"- {item['item']} ({item['ducats']}d + {item['credits']}cr)<br>"
+                item_name = item.get('item', 'Unknown')
+                ducats = item.get('ducats', '?')
+                credits = item.get('credits', '?')
+                inventory_str += f"- {item_name} ({ducats}d + {credits}cr)<br>"
             return inventory_str
         else:
-            return f"Baro arrives in {void_trader['startString']} at {void_trader['location']}"
+            return f"Baro arrives in {void_trader.get('startString', 'Unknown')} at {void_trader.get('location', 'Unknown')}"
 
     @staticmethod
     def get_drop_locations(item_name):
