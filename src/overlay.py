@@ -2,6 +2,7 @@ import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QLineEdit, QScrollArea, QFrame, QTabWidget, QTextEdit, QTextBrowser, QHBoxLayout, QPushButton
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QUrl
+from config import ConfigManager
 
 class WarframeOverlay(QMainWindow):
     search_triggered = pyqtSignal(str)
@@ -9,7 +10,9 @@ class WarframeOverlay(QMainWindow):
 
     def __init__(self):
         super().__init__()
+        self.config = ConfigManager.load_config()
         self.initUI()
+        self.load_state()
 
     def initUI(self):
         # Set window flags for transparency and stay on top
@@ -20,8 +23,14 @@ class WarframeOverlay(QMainWindow):
         )
         self.setAttribute(Qt.WidgetAttribute.WA_TranslucentBackground)
         
-        # Position the overlay (Slightly larger for tabs)
-        self.setGeometry(50, 50, 400, 600)
+        # Position the overlay from config
+        geo = self.config.get("window", {})
+        self.setGeometry(
+            geo.get("x", 50), 
+            geo.get("y", 50), 
+            geo.get("width", 400), 
+            geo.get("height", 600)
+        )
 
         # Central widget
         self.container = QFrame()
@@ -247,6 +256,27 @@ class WarframeOverlay(QMainWindow):
         
     def hide_reference_text(self):
         self.ref_text.hide() # Optional utility
+
+    def load_state(self):
+        """Restore UI state from config."""
+        notes = self.config.get("notes", "")
+        self.notes_input.setPlainText(notes)
+
+    def closeEvent(self, event):
+        """Save state on close."""
+        # Save geometry
+        geo = self.geometry()
+        data = {
+            "window": {
+                "x": geo.x(),
+                "y": geo.y(),
+                "width": geo.width(),
+                "height": geo.height()
+            },
+            "notes": self.notes_input.toPlainText()
+        }
+        ConfigManager.save_config(data)
+        super().closeEvent(event)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
