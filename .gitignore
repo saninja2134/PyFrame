@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+build/
+dist/
+
+# VS Code
+.vscode/
+*.ipynb
+.ipynb_checkpoints/
+
+# Project specific
+page.html
+scrapers_test.py
+debug_api.py
+src/data/overframe_cache.json
