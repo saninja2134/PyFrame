@@ -2,12 +2,17 @@ import sys
 import time
 import requests
 import base64
+import json
+import os
 from datetime import datetime, timezone
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtCore import QTimer, QObject, pyqtSignal, QThread
 from overlay import WarframeOverlay
 from api_clients import WarframeAPI, WarframeReference
 from pynput import keyboard
+
+# Helper for handling cached world data
+CACHE_FILE = "world_state_cache.json"
 
 class SearchWorker(QThread):
     finished = pyqtSignal(str, str) # summary_html, bis_url
@@ -100,6 +105,8 @@ class OverlayController(QObject):
         self.ui_timer.timeout.connect(self.update_cycle_display)
         self.ui_timer.start(1000)
 
+        # Initial Load: Try cache first, then fetch
+        self.load_cached_world_data()
         self.update_world_data()
 
     def emit_toggle(self):
@@ -107,6 +114,17 @@ class OverlayController(QObject):
 
     def emit_quit(self):
         self.quit_requested.emit()
+
+    def load_cached_world_data(self):
+        """Loads world state from local JSON cache if available."""
+        if os.path.exists(CACHE_FILE):
+            try:
+                with open(CACHE_FILE, 'r') as f:
+                    state = json.load(f)
+                    print("Loaded world state from cache.")
+                    self.process_world_state(state)
+            except Exception as e:
+                print(f"Failed to load cache: {e}")
 
     def toggle_visibility_safe(self):
         self.visible = not self.visible
@@ -223,94 +241,108 @@ class OverlayController(QObject):
         final_html = "<br>".join(cycle_lines) + "<br><br>" + self.nightwave_html
         self.overlay.update_cycles_tab(final_html)
 
+    def process_world_state(self, state):
+        """Updates UI with the provided world state dictionary."""
+        if not state: return
+
+        try:
+            # --- Tab 1: Cycles ---
+            # Store Data for Local Countdown
+            self.cycle_data = {
+                'earth': {
+                    'state': state.get('earthCycle', {}).get('state', 'Unknown'),
+                    'expiry': self.parse_time(state.get('earthCycle', {}).get('expiry'))
+                },
+                'cetus': {
+                    'state': state.get('cetusCycle', {}).get('state', 'Unknown'),
+                    'expiry': self.parse_time(state.get('cetusCycle', {}).get('expiry'))
+                },
+                'vallis': {
+                    'state': state.get('vallisCycle', {}).get('state', 'Unknown'),
+                    'expiry': self.parse_time(state.get('vallisCycle', {}).get('expiry'))
+                },
+                'cambion': {
+                    'state': state.get('cambionCycle', {}).get('active', state.get('cambionCycle', {}).get('state', 'Unknown')),
+                    'expiry': self.parse_time(state.get('cambionCycle', {}).get('expiry'))
+                },
+                'zariman': {
+                    'state': state.get('zarimanCycle', {}).get('state', 'Unknown'),
+                    'expiry': self.parse_time(state.get('zarimanCycle', {}).get('expiry'))
+                }
+            }
+            
+            # Nightwave (Static until next fetch)
+            nw = state.get('nightwave')
+            self.nightwave_html = ""
+            if nw and nw.get('activeChallenges'):
+                self.nightwave_html += "<b>Nightwave:</b><br>"
+                for c in nw['activeChallenges'][:3]:
+                    self.nightwave_html += f"- {c['title']} ({c['reputation']})<br>"
+            
+            # Update Activities directly
+            self.update_cycle_display()
+
+            # --- Tab 2: Activities ---
+            activities_text = ""
+            
+            # Sortie
+            sortie = state.get('sortie', {})
+            if sortie:
+                boss = sortie.get('boss', 'Unknown')
+                faction = sortie.get('faction', 'Unknown')
+                activities_text += f"<b>Sortie ({boss} - {faction}):</b><br>"
+                for idx, mission in enumerate(sortie.get('variants', []), 1):
+                    activities_text += f"{idx}. {mission['missionType']} - {mission.get('modifier', 'None')}<br>"
+                activities_text += "<br>"
+
+            # Archon Hunt
+            archon = state.get('archonHunt', {})
+            if archon:
+                boss = archon.get('boss', 'Unknown')
+                activities_text += f"<b>Archon Hunt ({boss}):</b><br>"
+                for idx, mission in enumerate(archon.get('variants', []), 1):
+                    activities_text += f"{idx}. {mission['missionType']}<br>"
+                activities_text += "<br>"
+
+            # Void Trader
+            trader = state.get('voidTrader', {})
+            activities_text += f"<b>Void Trader:</b><br>{WarframeAPI.process_void_trader(trader)}<br><br>"
+
+            # Invasions
+            invasions = WarframeAPI.process_invasions(state.get('invasions', []))
+            if invasions:
+                activities_text += "<b>Interesting Invasions:</b><br>"
+                for inv in invasions:
+                    activities_text += f"- {inv}<br>"
+                activities_text += "<br>"
+
+            # Fissures (only non-standard/SP/Storms or just basic summary)
+            # Let's show active fissures counts or high tier ones
+            fissures = state.get('fissures', [])
+            if fissures:
+                activities_text += f"<b>Active Fissures: {len(fissures)}</b><br>"
+            
+            self.overlay.update_activities_tab(activities_text)
+
+        except Exception as e:
+            err_msg = f"Error parsing state: {e}"
+            self.overlay.update_cycles_tab(err_msg)
+
     def update_world_data(self):
         # Fetch world state info
         state = WarframeAPI.get_world_state()
         self.last_fetch_time = time.time()
         
         if state:
+            # Cache it
             try:
-                # --- Tab 1: Cycles ---
-                # Store Data for Local Countdown
-                self.cycle_data = {
-                    'earth': {
-                        'state': state.get('earthCycle', {}).get('state', 'Unknown'),
-                        'expiry': self.parse_time(state.get('earthCycle', {}).get('expiry'))
-                    },
-                    'cetus': {
-                        'state': state.get('cetusCycle', {}).get('state', 'Unknown'),
-                        'expiry': self.parse_time(state.get('cetusCycle', {}).get('expiry'))
-                    },
-                    'vallis': {
-                        'state': state.get('vallisCycle', {}).get('state', 'Unknown'),
-                        'expiry': self.parse_time(state.get('vallisCycle', {}).get('expiry'))
-                    },
-                    'cambion': {
-                        'state': state.get('cambionCycle', {}).get('active', state.get('cambionCycle', {}).get('state', 'Unknown')),
-                        'expiry': self.parse_time(state.get('cambionCycle', {}).get('expiry'))
-                    },
-                    'zariman': {
-                        'state': state.get('zarimanCycle', {}).get('state', 'Unknown'),
-                        'expiry': self.parse_time(state.get('zarimanCycle', {}).get('expiry'))
-                    }
-                }
-                
-                # Nightwave (Static until next fetch)
-                nw = state.get('nightwave')
-                self.nightwave_html = ""
-                if nw and nw.get('activeChallenges'):
-                    self.nightwave_html += "<b>Nightwave:</b><br>"
-                    for c in nw['activeChallenges'][:3]:
-                        self.nightwave_html += f"- {c['title']} ({c['reputation']})<br>"
-                
-                # Update Activities directly
-                self.update_cycle_display()
-
-                # --- Tab 2: Activities ---
-                activities_text = ""
-                
-                # Sortie
-                sortie = state.get('sortie', {})
-                if sortie:
-                    boss = sortie.get('boss', 'Unknown')
-                    faction = sortie.get('faction', 'Unknown')
-                    activities_text += f"<b>Sortie ({boss} - {faction}):</b><br>"
-                    for idx, mission in enumerate(sortie.get('variants', []), 1):
-                        activities_text += f"{idx}. {mission['missionType']} - {mission.get('modifier', 'None')}<br>"
-                    activities_text += "<br>"
-
-                # Archon Hunt
-                archon = state.get('archonHunt', {})
-                if archon:
-                    boss = archon.get('boss', 'Unknown')
-                    activities_text += f"<b>Archon Hunt ({boss}):</b><br>"
-                    for idx, mission in enumerate(archon.get('variants', []), 1):
-                        activities_text += f"{idx}. {mission['missionType']}<br>"
-                    activities_text += "<br>"
-
-                # Void Trader
-                trader = state.get('voidTrader', {})
-                activities_text += f"<b>Void Trader:</b><br>{WarframeAPI.process_void_trader(trader)}<br><br>"
-
-                # Invasions
-                invasions = WarframeAPI.process_invasions(state.get('invasions', []))
-                if invasions:
-                    activities_text += "<b>Interesting Invasions:</b><br>"
-                    for inv in invasions:
-                        activities_text += f"- {inv}<br>"
-                    activities_text += "<br>"
-
-                # Fissures (only non-standard/SP/Storms or just basic summary)
-                # Let's show active fissures counts or high tier ones
-                fissures = state.get('fissures', [])
-                if fissures:
-                    activities_text += f"<b>Active Fissures: {len(fissures)}</b><br>"
-                
-                self.overlay.update_activities_tab(activities_text)
-
+                with open(CACHE_FILE, 'w') as f:
+                    json.dump(state, f)
             except Exception as e:
-                err_msg = f"Error parsing state: {e}"
-                self.overlay.update_cycles_tab(err_msg)
+                print(f"Failed to save cache: {e}")
+            
+            # Process it
+            self.process_world_state(state)
         else:
             self.overlay.update_cycles_tab("Failed to fetch world state data.<br>Check internet connection.")
             self.overlay.update_activities_tab("Failed to fetch world state.")
