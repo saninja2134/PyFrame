@@ -2,6 +2,7 @@ import sys
 from PyQt6.QtWidgets import QApplication, QMainWindow, QLabel, QVBoxLayout, QWidget, QLineEdit, QScrollArea, QFrame, QTabWidget, QTextEdit, QTextBrowser, QHBoxLayout, QPushButton
 from PyQt6.QtWebEngineWidgets import QWebEngineView
 from PyQt6.QtCore import Qt, QPoint, pyqtSignal, QUrl
+from PyQt6.QtGui import QScreen
 from config import ConfigManager
 
 class WarframeOverlay(QMainWindow):
@@ -25,12 +26,27 @@ class WarframeOverlay(QMainWindow):
         
         # Position the overlay from config
         geo = self.config.get("window", {})
-        self.setGeometry(
-            geo.get("x", 50), 
-            geo.get("y", 50), 
-            geo.get("width", 400), 
-            geo.get("height", 600)
-        )
+
+        # Dynamic Scaling for High Res Displays
+        scale_factor = 1.0
+        screen = QApplication.primaryScreen()
+        if screen:
+            rect = screen.geometry()
+            if rect.height() > 1080:
+                scale_factor = rect.height() / 1080.0
+                scale_factor = min(scale_factor, 2.5) # Cap at 2.5x
+
+        x = geo.get("x", 50)
+        y = geo.get("y", 50)
+        w = geo.get("width", 400)
+        h = geo.get("height", 600)
+
+        # Apply scaling only if using default dimensions (fresh install or reset)
+        if w == 400 and h == 600 and scale_factor > 1.0:
+            w = int(400 * scale_factor)
+            h = int(600 * scale_factor)
+
+        self.setGeometry(x, y, w, h)
 
         # Central widget
         self.container = QFrame()
