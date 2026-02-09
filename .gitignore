@@ -9,6 +9,8 @@ venv/
 .venv/
 build/
 dist/
+build_output/
+compilation_output/
 
 # VS Code
 .vscode/

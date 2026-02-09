@@ -31,3 +31,23 @@ A lightweight, non-Overwolf based overlay for Warframe.
 - **Search**: Type an item name in the search bar and press Enter.
 - **Toggle**: Use `Ctrl+Alt+O` to hide/show.
 - **Exit**: Use `Ctrl+Alt+X` or close the terminal / `run.bat` window.
+
+## Building from Source
+
+To create a standalone executable (`.exe`) that doesn't require Python to be installed on the target machine:
+
+1. Ensure all dependencies are installed and `PyQt6` is up to date:
+   ```bash
+   pip install -r requirements.txt
+   ```
+2. Run the custom build script:
+   ```bash
+   python build_script.py
+   ```
+
+**What this script does:**
+- Cleans previous build artifacts.
+- Sanitizes the system `PATH` to prevent conflicting DLLs (fixes "Procedure not found" errors).
+- Bundles the application using `PyInstaller`.
+- Embeds local data cache and configuration.
+- Outputs a single-file executable to `build_output/dist/PyFrame.exe`.
